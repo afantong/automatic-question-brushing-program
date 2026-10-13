@@ -12,29 +12,36 @@ function bootQuiz(){
     info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
     star:'<path d="m12 2 3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/>',
     search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-    file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m9 15 2 2 4-4"/>'
+    file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m9 15 2 2 4-4"/>',
+    trash:'<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
   };
   function ic(name,cls){
     return '<svg class="ic '+(cls||'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICON[name]+'</svg>';
   }
 
   var BANK = window.MAYUAN_QUESTION_BANK;
-  if(!BANK || !BANK.chapters || !BANK.chapters.length){
+  if(!BANK || !Array.isArray(BANK.chapters)){
     document.getElementById('qcard').innerHTML =
-      '<div class="ws-none">'+ic('info')+'<b>题库未加载</b><span>请确认 data/question-bank.js 或 data/demo-bank.js 存在。</span></div>';
+      '<div class="ws-none">'+ic('info')+'<b>题库未加载</b><span>请确认 data/question-bank.js 或 data/demo-bank.js 存在且格式正确。</span></div>';
     return;
   }
 
-  var CHAPTERS = BANK.chapters;
-  var ALL = [];
-  var BY_ID = {};
-  CHAPTERS.forEach(function(ch){
-    ch.questions.forEach(function(q){
-      q.chapterKey = ch.key; q.chapterName = ch.name; q.chapterTitle = ch.subtitle;
-      ALL.push(q); BY_ID[q.id] = q;
+  var CHAPTERS = [], ALL = [], BY_ID = {}, TOTAL = 0;
+
+  function rebuildIndexes(){
+    CHAPTERS = BANK.chapters || [];
+    ALL = [];
+    BY_ID = {};
+    CHAPTERS.forEach(function(ch){
+      ch.questions = ch.questions || [];
+      ch.questions.forEach(function(q){
+        q.chapterKey = ch.key; q.chapterName = ch.name; q.chapterTitle = ch.subtitle;
+        ALL.push(q); BY_ID[q.id] = q;
+      });
     });
-  });
-  var TOTAL = ALL.length;
+    TOTAL = ALL.length;
+  }
+  rebuildIndexes();
 
   var TYPE_LABEL = {single:'单选题', multi:'多选题', judge:'判断题'};
   var LETTERS = ['A','B','C','D','E','F','G','H'];
@@ -74,7 +81,7 @@ function bootQuiz(){
       if(typeof saved.sheetOpen === 'boolean') state.sheetOpen = saved.sheetOpen;
     }
   }catch(e){}
-  if(!chapterOf(state.chapter)) state.chapter = CHAPTERS[0].key;
+  if(!chapterOf(state.chapter)) state.chapter = CHAPTERS[0] ? CHAPTERS[0].key : '';
 
   function save(){
     try{ localStorage.setItem(STORE, JSON.stringify({
@@ -295,7 +302,7 @@ function bootQuiz(){
   function syncSidebar(){
     var exam = state.mode === 'exam';
     el('exam-panel').hidden = !exam;
-    el('chapter-panel').hidden = exam;
+    el('chapter-panel').hidden = exam || !CHAPTERS.length;
     el('overall-panel').hidden = exam;
     el('searchbox').hidden = exam;
   }
@@ -312,6 +319,27 @@ function bootQuiz(){
 
     var card = el('qcard');
     var ch = chapterOf(state.chapter);
+
+    if(!TOTAL){
+      el('ws-tag').textContent = '空题库';
+      el('ws-tag').className = 'tag grey';
+      el('ws-title').textContent = '还没有题目';
+      el('ws-count').innerHTML = '共 <b>0</b> 题';
+      el('ws-timer').hidden = true;
+      el('exam-summary').hidden = true;
+      el('btn-exam-submit').hidden = true;
+      el('sheet').hidden = true;
+      el('btn-submit').hidden = true;
+      el('btn-prev').disabled = true;
+      el('btn-next').disabled = true;
+      el('foot-hint').textContent = '';
+      card.innerHTML = '<div class="ws-none">' + ic('file') + '<b>题库是空的</b>' +
+        '<span>导入一个 Word 文档或文本文件就能开始。</span>' +
+        '<button class="btn btn-primary" type="button" id="btn-import-empty">导入题库文件</button></div>';
+      var emptyBtn = el('btn-import-empty');
+      if(emptyBtn) emptyBtn.addEventListener('click', function(){ el('bank-file').click(); });
+      return;
+    }
 
     el('ws-tag').textContent = state.mode === 'wrong' ? '错题本' : (ch ? ch.name : '');
     el('ws-tag').className = 'tag' + (state.mode === 'wrong' ? ' grey' : '');
@@ -353,6 +381,8 @@ function bootQuiz(){
       ' · 原卷第 ' + q.num + ' 题</span>' +
       '<button type="button" class="star' + (state.bookmarks[q.id] ? ' on' : '') + '" id="btn-star" title="收藏本题">' +
       ic('star') + (state.bookmarks[q.id] ? '已收藏' : '收藏') + '</button>' +
+      '<button type="button" class="star danger" id="btn-del-q" title="删除这道题">' +
+      ic('trash') + '删除</button>' +
       '</div>';
     html += '<h2 class="stem">' + esc(q.stem) + '</h2>';
     html += '<div class="opts">' + optionsHTML(q, userAns, {
@@ -385,6 +415,8 @@ function bootQuiz(){
     }
     var star = el('btn-star');
     if(star) star.addEventListener('click', function(){ toggleBookmark(q); });
+    var delQ = el('btn-del-q');
+    if(delQ) delQ.addEventListener('click', function(){ deleteQuestion(q); });
     var redo = el('btn-redo');
     if(redo) redo.addEventListener('click', function(){ redoQuestion(q); });
 
@@ -538,6 +570,24 @@ function bootQuiz(){
       el('btn-submit').hidden = true;
       el('btn-exam-submit').hidden = true;
       el('foot-hint').textContent = '';
+      return;
+    }
+
+    if(!TOTAL){
+      el('ws-tag').textContent = '模拟考试';
+      el('ws-tag').className = 'tag';
+      el('ws-title').textContent = '还没有题目';
+      el('ws-count').innerHTML = '共 <b>0</b> 题';
+      el('ws-timer').hidden = true;
+      el('exam-summary').hidden = true;
+      el('sheet').hidden = true;
+      el('btn-submit').hidden = true;
+      el('btn-exam-submit').hidden = true;
+      el('btn-prev').disabled = true;
+      el('btn-next').disabled = true;
+      el('foot-hint').textContent = '';
+      card.innerHTML = '<div class="ws-none">' + ic('file') + '<b>题库是空的</b>' +
+        '<span>先在左侧「题库」里导入题目，再来组卷。</span></div>';
       return;
     }
 
@@ -934,8 +984,100 @@ function bootQuiz(){
     var label = src === 'imported' ? '本地导入题库'
               : (src === 'file' ? '项目题库文件' : '示例题库');
     el('bank-name').textContent = label + ' · ' + TOTAL + ' 题';
-    el('btn-clear-bank').hidden = src !== 'imported';
+    el('btn-restore-bank').hidden = src !== 'imported';
     el('bank-note').hidden = src !== 'demo';
+    var host = el('bank-chapters');
+    if(!CHAPTERS.length){
+      host.innerHTML = '<div class="bank-empty">还没有章节，先导入题库文件。</div>';
+      return;
+    }
+    host.innerHTML = CHAPTERS.map(function(ch){
+      return '<div class="bank-chap"><span class="nm">' + esc(ch.name) + '</span>' +
+        '<span class="ct">' + ch.questions.length + ' 题</span>' +
+        '<button type="button" class="del" data-del-chapter="' + esc(ch.key) + '">删除</button></div>';
+    }).join('');
+  }
+
+  /* ---------------- 题库的增删改 ---------------- */
+  function persistBank(){
+    try{
+      localStorage.setItem(BANK_STORE, JSON.stringify(BANK));
+      window.MAYUAN_BANK_SOURCE = 'imported';
+    }catch(e){
+      toast('浏览器存不下这么大的题库', 'warn');
+    }
+  }
+
+  /* 删题/删章节改的是浏览器里的副本，所以第一次修改时会先把当前题库复制到本地 */
+  function ensureLocalCopy(){
+    if(window.MAYUAN_BANK_SOURCE !== 'imported') persistBank();
+  }
+
+  /* 题库变了之后，把指向已消失题目的记录一并清掉，免得错题本统计出幽灵数据 */
+  function pruneState(){
+    ['answers', 'results', 'bookmarks', 'wrongs'].forEach(function(k){
+      Object.keys(state[k]).forEach(function(id){ if(!BY_ID[id]) delete state[k][id]; });
+    });
+    Object.keys(state.pos).forEach(function(k){
+      if(k !== 'wrong' && k !== 'exam' && !chapterOf(k)) delete state.pos[k];
+    });
+    if(!chapterOf(state.chapter)) state.chapter = CHAPTERS[0] ? CHAPTERS[0].key : '';
+    if(state.exam && state.exam.active){
+      state.exam.ids = state.exam.ids.filter(function(id){ return !!BY_ID[id]; });
+      Object.keys(state.exam.picks).forEach(function(id){ if(!BY_ID[id]) delete state.exam.picks[id]; });
+      Object.keys(state.exam.flagged).forEach(function(id){ if(!BY_ID[id]) delete state.exam.flagged[id]; });
+      if(!state.exam.ids.length) state.exam = newExamState();
+    }
+  }
+
+  function afterBankChange(){
+    rebuildIndexes();
+    pruneState();
+    save();
+    renderStats();
+    renderBankPanel();
+    renderChapters();
+    renderWorkspace();
+  }
+
+  function deleteQuestion(q){
+    if(!window.confirm('删除这道题？\n只改浏览器里的题库副本，不动你的 Word 文件。')) return;
+    ensureLocalCopy();
+    CHAPTERS.forEach(function(ch){
+      var ids = ch.questions.map(function(x){ return x.id; });
+      var i = ids.indexOf(q.id);
+      if(i >= 0) ch.questions.splice(i, 1);
+    });
+    persistBank();
+    afterBankChange();
+    toast('已删除这道题');
+  }
+
+  function deleteChapter(key){
+    var ch = chapterOf(key);
+    if(!ch) return;
+    if(!window.confirm('删除整章「' + ch.name + '」（' + ch.questions.length + ' 题）？\n只改浏览器里的题库副本，不动你的 Word 文件。')) return;
+    ensureLocalCopy();
+    BANK.chapters = CHAPTERS.filter(function(c){ return c.key !== key; });
+    persistBank();
+    afterBankChange();
+    toast('已删除章节「' + ch.name + '」');
+  }
+
+  function clearAllQuestions(){
+    if(!TOTAL){ toast('题库已经是空的', 'warn'); return; }
+    if(!window.confirm('清空全部 ' + TOTAL + ' 道题？\n清空后可以重新导入，也可以用「恢复为原题库」撤回。')) return;
+    ensureLocalCopy();
+    BANK.chapters = [];
+    persistBank();
+    afterBankChange();
+    toast('已清空题目，点「导入题库文件」重新导入');
+  }
+
+  function restoreBank(){
+    if(!window.confirm('放弃浏览器里的题库，回到项目自带的题库文件（或示例题库）？')) return;
+    try{ localStorage.removeItem(BANK_STORE); }catch(e){}
+    location.reload();
   }
 
   function hintHTML(){
@@ -1036,10 +1178,11 @@ function bootQuiz(){
     if(bankFile.files && bankFile.files.length) openImportModal(bankFile.files);
   });
   el('btn-export').addEventListener('click', exportBank);
-  el('btn-clear-bank').addEventListener('click', function(){
-    if(!window.confirm('清除浏览器里导入的题库？之后会回到项目自带的题库。')) return;
-    try{ localStorage.removeItem(BANK_STORE); }catch(e){}
-    location.reload();
+  el('btn-clear-questions').addEventListener('click', clearAllQuestions);
+  el('btn-restore-bank').addEventListener('click', restoreBank);
+  el('bank-chapters').addEventListener('click', function(e){
+    var b = e.target.closest('[data-del-chapter]');
+    if(b) deleteChapter(b.dataset.delChapter);
   });
   el('import-close').addEventListener('click', closeImport);
   el('import-modal').addEventListener('click', function(e){
@@ -1091,7 +1234,8 @@ function bootQuiz(){
     if(!raw) return null;
     try{
       var b = JSON.parse(raw);
-      if(b && b.chapters && b.chapters.length) return b;
+      // 允许空题库（chapters: []），这样"清空全部题目"之后刷新不会又冒出来
+      if(b && Array.isArray(b.chapters)) return b;
     }catch(e){}
     try{ localStorage.removeItem(BANK_STORE); }catch(e){}
     return null;
