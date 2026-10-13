@@ -855,8 +855,15 @@ function bootQuiz(){
     if(state.mode !== 'exam' || !state.exam.active || state.exam.submitted) return;
     state.exam.elapsed++;
     updateTimers();
-    if(state.exam.elapsed % 15 === 0) save();
+    if(state.exam.elapsed % 5 === 0) save();
   }, 1000);
+
+  // 离开页面/刷新前把模考用时落盘，否则刷新后计时会归零
+  function flushExam(){
+    if(state.mode === 'exam' && state.exam.active && !state.exam.submitted) save();
+  }
+  window.addEventListener('beforeunload', flushExam);
+  window.addEventListener('pagehide', flushExam);
 
   el('sheet-toggle').addEventListener('click', function(){
     state.sheetOpen = !state.sheetOpen; save();
@@ -910,6 +917,16 @@ function bootQuiz(){
       e.preventDefault(); pick(q, letter);
     }
   });
+
+  function storageAvailable(){
+    try{
+      localStorage.setItem('__probe__', '1');
+      localStorage.removeItem('__probe__');
+      return true;
+    }catch(e){
+      return false;
+    }
+  }
 
   /* ---------------- 题库：导入 / 导出 / 清除 ---------------- */
   function renderBankPanel(){
@@ -1032,6 +1049,7 @@ function bootQuiz(){
   });
 
   /* ---------------- boot ---------------- */
+  if(!storageAvailable()) el('storage-warn').hidden = false;
   renderBankPanel();
   var meta = BANK.meta || {};
   if(meta.title){

@@ -246,6 +246,7 @@
   }
 
   /* ---------- 题库面板 ---------- */
+  .storage-warn{margin:12px 0 0;font-size:12px;line-height:1.7;color:#92400e;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:9px 11px}
   .bank-box{padding:14px;display:flex;flex-direction:column;gap:8px}
   .bank-now{font-size:13px;color:var(--muted)}
   .bank-now b{color:var(--ink)}
