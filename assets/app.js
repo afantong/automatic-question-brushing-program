@@ -250,7 +250,7 @@ function bootQuiz(){
       b.innerHTML =
         '<span class="chap-top"><span class="chap-name">' + esc(ch.name) + '</span>' +
         '<span class="chap-count">' + done + '/' + ch.questions.length + '</span></span>' +
-        '<span class="chap-sub">' + esc(ch.subtitle) + '</span>' +
+        (ch.subtitle ? '<span class="chap-sub">' + esc(ch.subtitle) + '</span>' : '') +
         '<span class="chap-bar"><i style="width:' + pct.toFixed(1) + '%"></i></span>' +
         '<span class="chap-acc">' + (done ? '正确率 <b>' + Math.round(ok / done * 100) + '%</b>' : '尚未开始') + '</span>';
       b.addEventListener('click', function(){ selectChapter(ch.key); });
@@ -315,7 +315,7 @@ function bootQuiz(){
 
     el('ws-tag').textContent = state.mode === 'wrong' ? '错题本' : (ch ? ch.name : '');
     el('ws-tag').className = 'tag' + (state.mode === 'wrong' ? ' grey' : '');
-    el('ws-title').textContent = state.mode === 'wrong' ? '错题巩固与重练' : (ch ? ch.subtitle : '');
+    el('ws-title').textContent = state.mode === 'wrong' ? '错题巩固与重练' : (ch ? (ch.subtitle || ch.name) : '');
     el('ws-count').innerHTML = qs.length ? '题目 <b>' + (idx + 1) + '</b> / ' + qs.length : '题目 <b>0</b>';
     el('ws-timer').hidden = true;
     el('exam-summary').hidden = true;
@@ -935,6 +935,7 @@ function bootQuiz(){
               : (src === 'file' ? '项目题库文件' : '示例题库');
     el('bank-name').textContent = label + ' · ' + TOTAL + ' 题';
     el('btn-clear-bank').hidden = src !== 'imported';
+    el('bank-note').hidden = src !== 'demo';
   }
 
   function hintHTML(){

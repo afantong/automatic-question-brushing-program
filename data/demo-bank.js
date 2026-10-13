@@ -2,7 +2,7 @@
  * 示例题库（仓库自带）
  *
  * 只为让你 clone 下来就能直接跑起来看效果。
- * 你自己的题目不要写在这里：把 Word 放进 ../马原题/，运行 tools/build_bank.py，
+ * 你自己的题目不要写在这里：把 Word 放进一个目录（默认 ../题目文档/），运行 tools/build_bank.py，
  * 会生成 data/question-bank.js（那个文件已被 .gitignore 忽略，不会上传）。
  *
  * 字段说明见 docs/question-format.md
