@@ -938,16 +938,18 @@ function bootQuiz(){
   }
 
   function exportBank(){
-    var text = 'window.MAYUAN_QUESTION_BANK = ' + JSON.stringify(window.MAYUAN_QUESTION_BANK, null, 2) + ';\n';
-    var url = URL.createObjectURL(new Blob([text], {type: 'application/javascript;charset=utf-8'}));
+    var bank = window.MAYUAN_QUESTION_BANK;
+    var text = JSON.stringify(bank, null, 2) + '\n';
+    var title = (bank.meta && bank.meta.title) ? bank.meta.title : '题库';
+    var url = URL.createObjectURL(new Blob([text], {type: 'application/json;charset=utf-8'}));
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'question-bank.js';
+    a.download = title + '.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
-    toast('已导出题库文件');
+    toast('已导出备份文件 ' + title + '.json');
   }
 
   function showImportResult(res){

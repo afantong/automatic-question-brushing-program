@@ -93,3 +93,5 @@ window.MAYUAN_QUESTION_BANK = {
 
 小改动用不着 Word，直接往 `data/question-bank.js`（你自己的）或 `data/demo-bank.js`（示例）的 `questions` 数组里加一条就行。
 注意：下次运行 `tools/build_bank.py` 会覆盖 `data/question-bank.js`，所以长期维护还是建议改 Word 原文。
+
+网页里「导出当前题库」得到的是同一个结构的**纯 JSON** 文件（扩展名 `.json`），可以直接用文本编辑器改，改完再通过「导入题库文件」导回来。
