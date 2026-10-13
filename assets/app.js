@@ -1,3 +1,6 @@
+/* 浏览器里导入的题库存在 localStorage 的这个键下（加载器和页面逻辑都要用，所以放函数外面） */
+var BANK_STORE = 'mayuan.bank.v1';
+
 function bootQuiz(){
   "use strict";
 
@@ -71,6 +74,7 @@ function bootQuiz(){
       if(typeof saved.sheetOpen === 'boolean') state.sheetOpen = saved.sheetOpen;
     }
   }catch(e){}
+  if(!chapterOf(state.chapter)) state.chapter = CHAPTERS[0].key;
 
   function save(){
     try{ localStorage.setItem(STORE, JSON.stringify({
@@ -907,7 +911,126 @@ function bootQuiz(){
     }
   });
 
+  /* ---------------- 题库：导入 / 导出 / 清除 ---------------- */
+  function renderBankPanel(){
+    var src = window.MAYUAN_BANK_SOURCE || 'demo';
+    var label = src === 'imported' ? '本地导入题库'
+              : (src === 'file' ? '项目题库文件' : '示例题库');
+    el('bank-name').textContent = label + ' · ' + TOTAL + ' 题';
+    el('btn-clear-bank').hidden = src !== 'imported';
+  }
+
+  function hintHTML(){
+    return '<details class="imp-hint"><summary>Word 文档要写成什么格式？</summary>' +
+      '每道题三行，题号行和「答案：」是解析的锚点：<br>' +
+      '<code>1、题干……（ ）</code><br>' +
+      '<code>A、 选项一 B、 选项二 C、 选项三 D、 选项四</code><br>' +
+      '<code>答案：C</code><br>' +
+      '多选题写 <code>答案：AC</code>；判断题不用写选项，直接写 <code>答案：正确</code> 或 <code>答案：错误</code>。<br>' +
+      '文件名带第几章会自动分章，比如 <code>第二章题目.docx</code>。可以一次选多个文件，整门课一次导进来。' +
+      '</details>';
+  }
+
+  function closeImport(){
+    el('import-modal').hidden = true;
+    el('import-body').innerHTML = '';
+    el('import-foot').innerHTML = '';
+  }
+
+  function exportBank(){
+    var text = 'window.MAYUAN_QUESTION_BANK = ' + JSON.stringify(window.MAYUAN_QUESTION_BANK, null, 2) + ';\n';
+    var url = URL.createObjectURL(new Blob([text], {type: 'application/javascript;charset=utf-8'}));
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'question-bank.js';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    toast('已导出题库文件');
+  }
+
+  function showImportResult(res){
+    var bank = res.bank;
+    var body = el('import-body'), foot = el('import-foot');
+    var rows = bank.chapters.map(function(ch){
+      var c = {single:0, multi:0, judge:0};
+      ch.questions.forEach(function(q){ if(c[q.type] != null) c[q.type]++; });
+      return '<div class="imp-row"><b>' + esc(ch.name) + '</b><span>' +
+        ch.questions.length + ' 题 · 单 ' + c.single + ' 多 ' + c.multi + ' 判 ' + c.judge + '</span></div>';
+    }).join('');
+    var problems = (res.problems && res.problems.length)
+      ? '<div class="imp-problems">有 ' + res.problems.length + ' 处需要注意：<ul>' +
+        res.problems.slice(0, 12).map(function(p){ return '<li>' + esc(p) + '</li>'; }).join('') +
+        (res.problems.length > 12 ? '<li>……还有 ' + (res.problems.length - 12) + ' 处</li>' : '') +
+        '</ul></div>'
+      : '';
+    body.innerHTML =
+      '<div class="imp-field"><label for="imp-title">标题</label>' +
+      '<input class="inp" id="imp-title" value="' + esc(bank.meta.title) + '"></div>' +
+      '<div class="imp-big">共 ' + bank.meta.total + ' 题 · ' + bank.chapters.length + ' 个章节</div>' +
+      '<div class="imp-list">' + rows + '</div>' + problems + hintHTML() +
+      '<div class="bank-tip">导入后题库保存在这台设备的浏览器里，不上传、也不影响别人。</div>';
+    foot.innerHTML =
+      '<button class="btn btn-soft" type="button" id="imp-cancel">取消</button>' +
+      '<button class="btn btn-primary" type="button" id="imp-ok">导入并开始使用</button>';
+    el('imp-cancel').addEventListener('click', closeImport);
+    el('imp-ok').addEventListener('click', function(){
+      var t = el('imp-title').value.trim();
+      if(t) bank.meta.title = t;
+      try{
+        localStorage.setItem(BANK_STORE, JSON.stringify(bank));
+      }catch(e){
+        toast('浏览器存不下这么大的题库，建议少导几章', 'warn');
+        return;
+      }
+      location.reload();
+    });
+  }
+
+  function openImportModal(files){
+    var body = el('import-body'), foot = el('import-foot');
+    el('import-modal').hidden = false;
+    body.innerHTML = '<div class="imp-big">正在解析 ' + files.length + ' 个文件……</div>';
+    foot.innerHTML = '';
+    if(!window.MayuanImporter){
+      body.innerHTML = '<div class="imp-problems">解析模块没加载成功，刷新页面再试一次。</div>';
+      return;
+    }
+    window.MayuanImporter.parseFiles(files).then(showImportResult).catch(function(err){
+      body.innerHTML = '<div class="imp-problems">解析失败：' + esc(err && err.message ? err.message : String(err)) + '</div>' + hintHTML();
+      foot.innerHTML = '<button class="btn btn-soft" type="button" id="imp-again">重新选择文件</button>';
+      el('imp-again').addEventListener('click', function(){
+        closeImport();
+        el('bank-file').click();
+      });
+    });
+  }
+
+  var bankFile = el('bank-file');
+  el('btn-import').addEventListener('click', function(){
+    bankFile.value = '';
+    bankFile.click();
+  });
+  bankFile.addEventListener('change', function(){
+    if(bankFile.files && bankFile.files.length) openImportModal(bankFile.files);
+  });
+  el('btn-export').addEventListener('click', exportBank);
+  el('btn-clear-bank').addEventListener('click', function(){
+    if(!window.confirm('清除浏览器里导入的题库？之后会回到项目自带的题库。')) return;
+    try{ localStorage.removeItem(BANK_STORE); }catch(e){}
+    location.reload();
+  });
+  el('import-close').addEventListener('click', closeImport);
+  el('import-modal').addEventListener('click', function(e){
+    if(e.target === el('import-modal')) closeImport();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && !el('import-modal').hidden) closeImport();
+  });
+
   /* ---------------- boot ---------------- */
+  renderBankPanel();
   var meta = BANK.meta || {};
   if(meta.title){
     document.title = meta.title + (meta.subtitle ? ' · ' + meta.subtitle : '');
@@ -926,8 +1049,10 @@ function bootQuiz(){
 }
 
 /*
- * 题库加载：优先读你自己的 data/question-bank.js（由 tools/build_bank.py 生成，不进仓库），
- * 没有就退回仓库自带的 data/demo-bank.js 示例题库。
+ * 题库来源优先级：
+ *   1. 浏览器里导入的题库（存在 localStorage，见上面「题库」面板）
+ *   2. data/question-bank.js（由 tools/build_bank.py 生成，属个人内容，不进仓库）
+ *   3. data/demo-bank.js（仓库自带的示例题库）
  */
 (function(){
   function load(src){
@@ -939,9 +1064,32 @@ function bootQuiz(){
       document.head.appendChild(s);
     });
   }
+  function importedBank(){
+    var raw = null;
+    try{ raw = localStorage.getItem(BANK_STORE); }catch(e){ return null; }
+    if(!raw) return null;
+    try{
+      var b = JSON.parse(raw);
+      if(b && b.chapters && b.chapters.length) return b;
+    }catch(e){}
+    try{ localStorage.removeItem(BANK_STORE); }catch(e){}
+    return null;
+  }
+  var mine = importedBank();
+  if(mine){
+    window.MAYUAN_QUESTION_BANK = mine;
+    window.MAYUAN_BANK_SOURCE = 'imported';
+    bootQuiz();
+    return;
+  }
   load('data/question-bank.js').then(function(ok){
-    if(ok && window.MAYUAN_QUESTION_BANK) return;
-    return load('data/demo-bank.js');
+    if(ok && window.MAYUAN_QUESTION_BANK){
+      window.MAYUAN_BANK_SOURCE = 'file';
+      return;
+    }
+    return load('data/demo-bank.js').then(function(){
+      window.MAYUAN_BANK_SOURCE = 'demo';
+    });
   }).then(function(){
     bootQuiz();
   });

@@ -25,6 +25,18 @@
 
 ### 2. 换成自己的题
 
+**方式一：网页里直接导入（不用装任何东西）**
+
+1. 打开 `index.html`，左侧「题库」面板点「导入题库文件」；
+2. 选中你整理好的 Word（可以一次多选，比如绪论 + 第一章 + 第二章）；
+3. 看一眼解析结果（共多少题、哪些题有问题），点「导入并开始使用」。
+
+题库只存在你这台设备的浏览器里，不上传任何东西。「导出当前题库」可以把它存成文件备份，或者直接发给同学。
+
+![导入界面](docs/import.png)
+
+**方式二：用脚本批量生成（适合长期维护、题库很大）**
+
 ```
 ① 把 Word 题目文档放进一个目录
    （默认读仓库上一级的 马原题/，也可以用 -i 指定任意目录）
@@ -38,13 +50,14 @@
 python tools/build_bank.py -i "D:\我的题库" --title "我的题库" --subtitle "期末冲刺"
 ```
 
-题目文档的排版要求见 [docs/question-format.md](docs/question-format.md)，核心就是三行结构：题号行、选项行、`答案：X`。
-脚本会自动：
+两种方式解析的是同一套排版规则，见 [docs/question-format.md](docs/question-format.md)：题号行、选项行、`答案：X` 三行结构。
+解析时会自动：
 
 - 按文件名认章节，加新章节不用改代码
 - 识别单选 / 多选 / 判断三种题型
 - 清掉 Word 里复制粘贴带来的不可见字符
 - 报告题号缺口（比如「导论缺第 38 题」），方便回去补
+- 跳过读不出答案的题目，并在导入时列给你看
 
 ### 3. 发到手机上 / 放到网上
 
@@ -68,9 +81,10 @@ python tools/build_bank.py -i "D:\我的题库" --title "我的题库" --subtitl
 ## 目录结构
 
 ```
-index.html               页面骨架，约 140 行
+index.html               页面骨架，约 170 行
 assets/style.css         样式
 assets/app.js            全部交互逻辑
+assets/import.js         浏览器内解析 Word / 文本，生成题库
 data/demo-bank.js        仓库自带的示例题库
 data/question-bank.js    你自己的题库（由脚本生成，默认不上传）
 tools/build_bank.py      Word → 题库 的转换脚本（只用 Python 标准库）

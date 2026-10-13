@@ -82,6 +82,19 @@
         <div class="bad"><span>答错</span><b id="o-bad">0</b></div>
       </div>
     </section>
+
+    <section class="panel" id="bank-panel">
+      <h2 class="panel-h"><span>题库</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+      </h2>
+      <div class="bank-box">
+        <div class="bank-now">当前：<b id="bank-name">示例题库</b></div>
+        <button class="btn btn-soft" id="btn-import" type="button">导入题库文件</button>
+        <button class="btn btn-soft" id="btn-export" type="button">导出当前题库</button>
+        <button class="btn btn-soft" id="btn-clear-bank" type="button" hidden>清除导入的题库</button>
+        <p class="bank-tip">支持 Word（.docx）、纯文本（.txt / .md）和之前导出的题库文件，全部在本地解析，不上传任何东西。</p>
+      </div>
+    </section>
   </aside>
 
   <section class="workspace">
@@ -137,6 +150,20 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<div class="modal" id="import-modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="import-title">
+    <div class="modal-h">
+      <span id="import-title">导入题库</span>
+      <button class="modal-x" id="import-close" type="button" aria-label="关闭">&times;</button>
+    </div>
+    <div class="modal-body" id="import-body"></div>
+    <div class="modal-foot" id="import-foot"></div>
+  </div>
+</div>
+
+<input type="file" id="bank-file" accept=".docx,.txt,.md,.json,.js" multiple hidden>
+
+<script src="assets/import.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>
