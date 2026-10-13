@@ -1,0 +1,18 @@
+# 个人题库内容（由 tools/build_bank.py 从你自己的 Word 生成），不提交
+data/question-bank.js
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时文件
+~$*
+*.bak
+*.tmp

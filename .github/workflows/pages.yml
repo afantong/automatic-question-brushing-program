@@ -1,0 +1,45 @@
+# 把仓库根目录作为静态站点发布到 GitHub Pages
+#
+# 用法：推到 GitHub 后，到仓库 Settings → Pages，把 Source 选成 "GitHub Actions"，
+# 之后每次 push 到这个分支都会自动重新发布。
+#
+# 注意：CI 里是全新 checkout，不会有你本地的 data/question-bank.js，
+# 页面会自动退回 data/demo-bank.js 示例题库，所以站点一定打得开。
+
+name: Deploy static site to Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
