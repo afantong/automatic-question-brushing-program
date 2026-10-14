@@ -9,7 +9,7 @@
  */
 window.MAYUAN_QUESTION_BANK = {
   "meta": {
-    "title": "题库刷题系统",
+    "title": "自动刷题程序",
     "subtitle": "示例题库 · 章节刷题 + 模拟考试",
     "version": "1.0",
     "updated": "2026-10-13",

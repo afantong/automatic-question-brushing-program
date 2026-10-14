@@ -330,8 +330,8 @@ function bootQuiz(subjects, activeId){
     setText('h-bookmark-count', bm + ' 题');
     setText('h-bank-name', currentSubject.name || '示例题库');
     var meta = BANK.meta || {};
-    setText('hero-kicker', '题库刷题系统');
-    setText('hero-title', currentSubject.name || meta.title || '题库刷题系统');
+    setText('hero-kicker', '自动刷题程序');
+    setText('hero-title', currentSubject.name || meta.title || '自动刷题程序');
     setText('hero-sub', meta.subtitle || '章节练习 + 模拟考试');
   }
 
