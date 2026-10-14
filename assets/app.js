@@ -49,7 +49,7 @@ function bootQuiz(){
 
   /* ---------------- state ---------------- */
   var state = {
-    mode:'quiz', chapter:'intro', query:'', sheetOpen:true,
+    mode:'home', practiceMode:'quiz', chapter:'intro', query:'', sheetOpen:true,
     answers:{}, results:{}, bookmarks:{}, wrongs:{}, pos:{},
     examCfg:{scope:'all', quotas:{single:35, multi:15, judge:5}},
     exam:null
@@ -75,8 +75,10 @@ function bootQuiz(){
         state.exam = saved.exam;
         state.exam.filter = state.exam.filter || 'all';
       }
-      if(saved.mode==='study'||saved.mode==='wrong'||saved.mode==='quiz'||saved.mode==='exam') state.mode = saved.mode;
-      if(state.mode === 'exam' && !state.exam.active) state.mode = 'quiz';
+      var MODES = ['home','quiz','study','wrong','bookmark','exam','bank'];
+      if(saved.mode && MODES.indexOf(saved.mode) >= 0) state.mode = saved.mode;
+      if(saved.mode === 'quiz' || saved.mode === 'study') state.practiceMode = saved.mode;
+      if(state.mode === 'exam' && !state.exam.active) state.mode = 'home';
       if(BY_ID[saved.chapter] || CHAPTERS.some(function(c){return c.key===saved.chapter;})) state.chapter = saved.chapter;
       if(typeof saved.sheetOpen === 'boolean') state.sheetOpen = saved.sheetOpen;
     }
@@ -86,13 +88,14 @@ function bootQuiz(){
   function save(){
     try{ localStorage.setItem(STORE, JSON.stringify({
       answers:state.answers, results:state.results, bookmarks:state.bookmarks, wrongs:state.wrongs,
-      pos:state.pos, mode:state.mode, chapter:state.chapter, sheetOpen:state.sheetOpen,
+      pos:state.pos, mode:state.mode, practiceMode:state.practiceMode, chapter:state.chapter, sheetOpen:state.sheetOpen,
       examCfg:state.examCfg, exam:state.exam
     })); }catch(e){}
   }
 
   /* ---------------- helpers ---------------- */
   function el(id){ return document.getElementById(id); }
+  function setText(id, v){ var n = el(id); if(n) n.textContent = v; }
   function esc(s){
     return String(s).replace(/[&<>"']/g, function(c){
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -104,7 +107,12 @@ function bootQuiz(){
     return true;
   }
   function chapterOf(key){ for(var i=0;i<CHAPTERS.length;i++) if(CHAPTERS[i].key===key) return CHAPTERS[i]; return null; }
-  function scopeKey(){ return state.mode === 'wrong' ? 'wrong' : (state.mode === 'exam' ? 'exam' : state.chapter); }
+  function scopeKey(){
+    if(state.mode === 'wrong') return 'wrong';
+    if(state.mode === 'bookmark') return 'bookmark';
+    if(state.mode === 'exam') return 'exam';
+    return state.chapter;
+  }
   function matchQuery(q){
     if(!state.query) return true;
     var t = state.query.toLowerCase();
@@ -116,6 +124,8 @@ function bootQuiz(){
     var out;
     if(state.mode === 'wrong'){
       out = ALL.filter(function(q){ return !!state.wrongs[q.id]; });
+    }else if(state.mode === 'bookmark'){
+      out = ALL.filter(function(q){ return !!state.bookmarks[q.id]; });
     }else{
       var ch = chapterOf(state.chapter);
       out = ch ? ch.questions.slice() : [];
@@ -232,13 +242,21 @@ function bootQuiz(){
     el('s-done').textContent = t.done;
     el('s-acc').textContent = t.done ? Math.round(t.ok / t.done * 100) + '%' : '0%';
     el('s-wrong').textContent = t.bad;
-    el('o-done').textContent = t.done + ' / ' + t.total;
-    el('o-bar').style.width = (t.total ? t.done / t.total * 100 : 0) + '%';
-    el('o-ok').textContent = t.ok;
-    el('o-bad').textContent = t.bad;
-    var badge = el('wrong-badge');
-    badge.textContent = t.bad;
-    badge.hidden = t.bad === 0;
+    var pct = t.total ? Math.round(t.done / t.total * 100) : 0;
+    setText('h-total', t.total);
+    setText('h-done', t.done);
+    setText('h-acc', t.done ? Math.round(t.ok / t.done * 100) + '%' : '0%');
+    setText('h-wrong', t.bad);
+    var ring = el('hero-ring');
+    if(ring) ring.style.setProperty('--p', pct + '%');
+    setText('h-progress', pct + '%');
+    var wb = el('wrong-badge');
+    wb.textContent = t.bad;
+    wb.hidden = t.bad === 0;
+    var bm = Object.keys(state.bookmarks).length;
+    var bb = el('bookmark-badge');
+    bb.textContent = bm;
+    bb.hidden = bm === 0;
   }
   function renderChapters(){
     var host = el('chapter-list');
@@ -250,7 +268,7 @@ function bootQuiz(){
         if(r){ done++; if(r === 'correct') ok++; }
       });
       var pct = ch.questions.length ? done / ch.questions.length * 100 : 0;
-      var active = state.mode !== 'wrong' && state.chapter === ch.key;
+      var active = (state.mode === 'quiz' || state.mode === 'study') && state.chapter === ch.key;
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'chap' + (active ? ' active' : '');
@@ -269,6 +287,27 @@ function bootQuiz(){
     for(var i=0;i<btns.length;i++){
       btns[i].setAttribute('aria-selected', btns[i].dataset.mode === state.mode ? 'true' : 'false');
     }
+  }
+  function renderNav(){
+    var cur = (state.mode === 'quiz' || state.mode === 'study') ? 'practice' : state.mode;
+    var btns = el('main-nav').querySelectorAll('button[data-nav]');
+    for(var i=0;i<btns.length;i++){
+      if(btns[i].dataset.nav === cur) btns[i].setAttribute('data-active','');
+      else btns[i].removeAttribute('data-active');
+    }
+  }
+  function renderHome(){
+    var t = totals();
+    var bm = Object.keys(state.bookmarks).length;
+    setText('h-chapters', CHAPTERS.length + ' 章');
+    setText('h-wrong-count', t.bad + ' 题');
+    setText('h-bookmark-count', bm + ' 题');
+    var src = window.MAYUAN_BANK_SOURCE || 'demo';
+    setText('h-bank-name', src === 'imported' ? '本地导入' : (src === 'file' ? '项目题库' : '示例题库'));
+    var meta = BANK.meta || {};
+    setText('hero-kicker', '题库刷题系统');
+    setText('hero-title', meta.title || '题库刷题系统');
+    setText('hero-sub', meta.subtitle || '章节练习 + 模拟考试');
   }
 
   /* ---------------- question card ---------------- */
@@ -299,16 +338,27 @@ function bootQuiz(){
     return out;
   }
 
-  function syncSidebar(){
-    var exam = state.mode === 'exam';
+  function syncLayout(){
+    var m = state.mode;
+    el('view-home').hidden = m !== 'home';
+    el('view-bank').hidden = m !== 'bank';
+    el('view-practice').hidden = (m === 'home' || m === 'bank');
+    if(m === 'home' || m === 'bank') return;
+    var exam = m === 'exam';
+    var listMode = (m === 'quiz' || m === 'study');
+    el('tool-panel').hidden = !listMode;
     el('exam-panel').hidden = !exam;
-    el('chapter-panel').hidden = exam || !CHAPTERS.length;
-    el('overall-panel').hidden = exam;
-    el('searchbox').hidden = exam;
+    el('chapter-panel').hidden = exam || !listMode || !CHAPTERS.length;
+    var sidebar = document.querySelector('.sidebar');
+    if(sidebar) sidebar.hidden = !(listMode || exam);
+    el('view-practice').classList.toggle('solo', !(listMode || exam));
   }
 
   function renderWorkspace(){
-    syncSidebar();
+    syncLayout();
+    renderNav();
+    if(state.mode === 'home'){ renderHome(); return; }
+    if(state.mode === 'bank'){ renderBankPanel(); return; }
     if(state.mode === 'exam') return renderExam();
 
     var qs = currentList();
@@ -341,9 +391,11 @@ function bootQuiz(){
       return;
     }
 
-    el('ws-tag').textContent = state.mode === 'wrong' ? '错题本' : (ch ? ch.name : '');
-    el('ws-tag').className = 'tag' + (state.mode === 'wrong' ? ' grey' : '');
-    el('ws-title').textContent = state.mode === 'wrong' ? '错题巩固与重练' : (ch ? (ch.subtitle || ch.name) : '');
+    var isWrong = state.mode === 'wrong';
+    var isBookmark = state.mode === 'bookmark';
+    el('ws-tag').textContent = isWrong ? '错题本' : (isBookmark ? '收藏本' : (ch ? ch.name : ''));
+    el('ws-tag').className = 'tag' + ((isWrong || isBookmark) ? ' grey' : '');
+    el('ws-title').textContent = isWrong ? '错题巩固与重练' : (isBookmark ? '收藏题目集中刷' : (ch ? (ch.subtitle || ch.name) : ''));
     el('ws-count').innerHTML = qs.length ? '题目 <b>' + (idx + 1) + '</b> / ' + qs.length : '题目 <b>0</b>';
     el('ws-timer').hidden = true;
     el('exam-summary').hidden = true;
@@ -354,12 +406,15 @@ function bootQuiz(){
       var emptyHtml;
       if(state.mode === 'wrong'){
         emptyHtml = '<b>错题本是空的</b><span>做错的题目会自动收进来，答对后自动移出。</span>';
+      }else if(state.mode === 'bookmark'){
+        emptyHtml = '<b>收藏本是空的</b><span>在题目卡片上点「收藏」，就会收进来。</span>';
       }else if(state.query){
         emptyHtml = '<b>没有匹配的题目</b><span>换个关键词试试。</span>';
       }else{
         emptyHtml = '<b>本章暂无题目</b><span>当前章节还没有录入题目。</span>';
       }
-      card.innerHTML = '<div class="ws-none">' + ic(state.mode === 'wrong' ? 'okCircle' : 'search') + emptyHtml + '</div>';
+      var emptyIc = state.mode === 'wrong' ? 'okCircle' : (state.mode === 'bookmark' ? 'star' : 'search');
+      card.innerHTML = '<div class="ws-none">' + ic(emptyIc) + emptyHtml + '</div>';
       el('btn-prev').disabled = true;
       el('btn-next').disabled = true;
       el('btn-submit').hidden = true;
@@ -377,7 +432,7 @@ function bootQuiz(){
     var html = '<div class="qcard">';
     html += '<div class="qtop">' +
       '<span class="badge ' + q.type + '">' + TYPE_LABEL[q.type] + '</span>' +
-      '<span class="q-meta">' + esc(state.mode === 'wrong' ? q.chapterName : (ch ? ch.name : '')) +
+      '<span class="q-meta">' + esc((state.mode === 'wrong' || state.mode === 'bookmark') ? q.chapterName : (ch ? ch.name : '')) +
       ' · 原卷第 ' + q.num + ' 题</span>' +
       '<button type="button" class="star' + (state.bookmarks[q.id] ? ' on' : '') + '" id="btn-star" title="收藏本题">' +
       ic('star') + (state.bookmarks[q.id] ? '已收藏' : '收藏') + '</button>' +
@@ -757,6 +812,7 @@ function bootQuiz(){
     if(state.bookmarks[q.id]) delete state.bookmarks[q.id];
     else state.bookmarks[q.id] = true;
     save();
+    renderStats();
     renderWorkspace();
   }
 
@@ -802,8 +858,10 @@ function bootQuiz(){
       state.exam = newExamState();
     }
     state.mode = mode;
+    if(mode === 'quiz' || mode === 'study') state.practiceMode = mode;
     state.query = ''; el('search').value = ''; el('searchbox').classList.remove('has-value');
     if(mode === 'wrong') state.pos.wrong = 0;
+    if(mode === 'bookmark') state.pos.bookmark = 0;
     save(); renderModes(); renderExamPanel(); renderChapters(); renderWorkspace();
   }
 
@@ -857,6 +915,23 @@ function bootQuiz(){
   el('mode-seg').addEventListener('click', function(e){
     var b = e.target.closest('button[data-mode]');
     if(b) setMode(b.dataset.mode);
+  });
+  document.addEventListener('click', function(e){
+    var n = e.target.closest('[data-nav]');
+    if(!n) return;
+    var nav = n.dataset.nav;
+    if(nav === 'home') setMode('home');
+    else if(nav === 'practice') setMode(state.practiceMode || 'quiz');
+    else if(nav === 'wrong') setMode('wrong');
+    else if(nav === 'bookmark') setMode('bookmark');
+    else if(nav === 'exam') setMode('exam');
+    else if(nav === 'bank') setMode('bank');
+  });
+  el('btn-theme').addEventListener('click', function(){
+    var cur = document.documentElement.getAttribute('data-theme') || 'light';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try{ localStorage.setItem('mayuan.theme.v1', next); }catch(e){}
   });
   el('btn-prev').addEventListener('click', function(){ step(-1); });
   el('btn-next').addEventListener('click', function(){ step(1); });
@@ -946,6 +1021,7 @@ function bootQuiz(){
 
   document.addEventListener('keydown', function(e){
     if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if(state.mode === 'home' || state.mode === 'bank') return;
     var qs = currentList();
     var q = qs[state.pos[scopeKey()] || 0];
     if(!q) return;
