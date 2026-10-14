@@ -1080,6 +1080,17 @@ function bootQuiz(){
     location.reload();
   }
 
+  /* 一键回到"刚打开网页"的初始状态：清掉本机存的题库和全部做题记录 */
+  function wipeLocalData(){
+    if(!window.confirm('清空这台设备上保存的全部内容：导入的题库、做题记录、错题本、收藏。\n' +
+                       '你的 Word 文档和项目里的题库文件不受影响。\n\n确定清空？')) return;
+    try{
+      localStorage.removeItem(BANK_STORE);
+      localStorage.removeItem(STORE);
+    }catch(e){}
+    location.reload();
+  }
+
   function hintHTML(){
     return '<details class="imp-hint"><summary>Word 文档要写成什么格式？</summary>' +
       '每道题三行，题号行和「答案：」是解析的锚点：<br>' +
@@ -1180,6 +1191,7 @@ function bootQuiz(){
   el('btn-export').addEventListener('click', exportBank);
   el('btn-clear-questions').addEventListener('click', clearAllQuestions);
   el('btn-restore-bank').addEventListener('click', restoreBank);
+  el('btn-wipe').addEventListener('click', wipeLocalData);
   el('bank-chapters').addEventListener('click', function(e){
     var b = e.target.closest('[data-del-chapter]');
     if(b) deleteChapter(b.dataset.delChapter);
