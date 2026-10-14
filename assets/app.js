@@ -1,7 +1,10 @@
-/* 浏览器里导入的题库存在 localStorage 的这个键下（加载器和页面逻辑都要用，所以放函数外面） */
-var BANK_STORE = 'mayuan.bank.v1';
+/* 存储键统一放函数外面，加载器和页面逻辑都要用 */
+var BANK_STORE = 'mayuan.bank.v1';        // 旧版单题库（迁移后会删除）
+var SUBJECT_STORE = 'mayuan.subjects.v1'; // 用户自建的学科列表
+var ACTIVE_STORE = 'mayuan.active.v1';    // 当前选中的学科 id
+var STORE = 'mayuan.review.v1';           // 各学科的做题进度
 
-function bootQuiz(){
+function bootQuiz(subjects, activeId){
   "use strict";
 
   var ICON = {
@@ -19,12 +22,20 @@ function bootQuiz(){
     return '<svg class="ic '+(cls||'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICON[name]+'</svg>';
   }
 
-  var BANK = window.MAYUAN_QUESTION_BANK;
-  if(!BANK || !Array.isArray(BANK.chapters)){
+  var SUBJECTS = subjects || [];
+  function findSubject(id){
+    for(var i=0;i<SUBJECTS.length;i++) if(SUBJECTS[i].id === id) return SUBJECTS[i];
+    return null;
+  }
+
+  if(!SUBJECTS.length){
     document.getElementById('qcard').innerHTML =
       '<div class="ws-none">'+ic('info')+'<b>题库未加载</b><span>请确认 data/question-bank.js 或 data/demo-bank.js 存在且格式正确。</span></div>';
     return;
   }
+
+  var currentSubject = findSubject(activeId) || SUBJECTS[0];
+  var BANK = currentSubject;
 
   var CHAPTERS = [], ALL = [], BY_ID = {}, TOTAL = 0;
 
@@ -45,22 +56,33 @@ function bootQuiz(){
 
   var TYPE_LABEL = {single:'单选题', multi:'多选题', judge:'判断题'};
   var LETTERS = ['A','B','C','D','E','F','G','H'];
-  var STORE = 'mayuan.review.v1';
 
   /* ---------------- state ---------------- */
-  var state = {
-    mode:'home', practiceMode:'quiz', chapter:'intro', query:'', sheetOpen:true,
-    answers:{}, results:{}, bookmarks:{}, wrongs:{}, pos:{},
-    examCfg:{scope:'all', quotas:{single:35, multi:15, judge:5}},
-    exam:null
-  };
   function newExamState(){
     return {active:false, submitted:false, ids:[], picks:{}, flagged:{}, elapsed:0,
             scope:'all', quotas:{single:0, multi:0, judge:0}, short:{}, filter:'all'};
   }
-  state.exam = newExamState();
-  try{
-    var saved = JSON.parse(localStorage.getItem(STORE) || 'null');
+  function makeState(){
+    var s = {
+      mode:'home', practiceMode:'quiz', chapter:'intro', query:'', sheetOpen:true,
+      answers:{}, results:{}, bookmarks:{}, wrongs:{}, pos:{},
+      examCfg:{scope:'all', quotas:{single:35, multi:15, judge:5}},
+      exam:null
+    };
+    s.exam = newExamState();
+    return s;
+  }
+  function readProgressStore(){
+    try{
+      var raw = JSON.parse(localStorage.getItem(STORE) || 'null');
+      if(raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+    }catch(e){}
+    return {};
+  }
+  var progressStore = readProgressStore();
+  var state = makeState();
+  function hydrateState(){
+    var saved = progressStore[currentSubject.id];
     if(saved && typeof saved === 'object'){
       state.answers   = saved.answers   || {};
       state.results   = saved.results   || {};
@@ -82,15 +104,19 @@ function bootQuiz(){
       if(BY_ID[saved.chapter] || CHAPTERS.some(function(c){return c.key===saved.chapter;})) state.chapter = saved.chapter;
       if(typeof saved.sheetOpen === 'boolean') state.sheetOpen = saved.sheetOpen;
     }
-  }catch(e){}
-  if(!chapterOf(state.chapter)) state.chapter = CHAPTERS[0] ? CHAPTERS[0].key : '';
+    if(!chapterOf(state.chapter)) state.chapter = CHAPTERS[0] ? CHAPTERS[0].key : '';
+  }
+  hydrateState();
 
   function save(){
-    try{ localStorage.setItem(STORE, JSON.stringify({
-      answers:state.answers, results:state.results, bookmarks:state.bookmarks, wrongs:state.wrongs,
-      pos:state.pos, mode:state.mode, practiceMode:state.practiceMode, chapter:state.chapter, sheetOpen:state.sheetOpen,
-      examCfg:state.examCfg, exam:state.exam
-    })); }catch(e){}
+    try{
+      progressStore[currentSubject.id] = {
+        answers:state.answers, results:state.results, bookmarks:state.bookmarks, wrongs:state.wrongs,
+        pos:state.pos, mode:state.mode, practiceMode:state.practiceMode, chapter:state.chapter, sheetOpen:state.sheetOpen,
+        examCfg:state.examCfg, exam:state.exam
+      };
+      localStorage.setItem(STORE, JSON.stringify(progressStore));
+    }catch(e){}
   }
 
   /* ---------------- helpers ---------------- */
@@ -302,11 +328,10 @@ function bootQuiz(){
     setText('h-chapters', CHAPTERS.length + ' 章');
     setText('h-wrong-count', t.bad + ' 题');
     setText('h-bookmark-count', bm + ' 题');
-    var src = window.MAYUAN_BANK_SOURCE || 'demo';
-    setText('h-bank-name', src === 'imported' ? '本地导入' : (src === 'file' ? '项目题库' : '示例题库'));
+    setText('h-bank-name', currentSubject.name || '示例题库');
     var meta = BANK.meta || {};
     setText('hero-kicker', '题库刷题系统');
-    setText('hero-title', meta.title || '题库刷题系统');
+    setText('hero-title', currentSubject.name || meta.title || '题库刷题系统');
     setText('hero-sub', meta.subtitle || '章节练习 + 模拟考试');
   }
 
@@ -436,8 +461,9 @@ function bootQuiz(){
       ' · 原卷第 ' + q.num + ' 题</span>' +
       '<button type="button" class="star' + (state.bookmarks[q.id] ? ' on' : '') + '" id="btn-star" title="收藏本题">' +
       ic('star') + (state.bookmarks[q.id] ? '已收藏' : '收藏') + '</button>' +
-      '<button type="button" class="star danger" id="btn-del-q" title="删除这道题">' +
-      ic('trash') + '删除</button>' +
+      (currentSubject.source === 'imported'
+        ? '<button type="button" class="star danger" id="btn-del-q" title="删除这道题">' + ic('trash') + '删除</button>'
+        : '') +
       '</div>';
     html += '<h2 class="stem">' + esc(q.stem) + '</h2>';
     html += '<div class="opts">' + optionsHTML(q, userAns, {
@@ -1054,40 +1080,151 @@ function bootQuiz(){
     }
   }
 
+  /* ---------------- 学科（多题库） ---------------- */
+  function userSubjects(){ return SUBJECTS.filter(function(s){ return s.source === 'imported'; }); }
+  function persistSubjects(){
+    try{ localStorage.setItem(SUBJECT_STORE, JSON.stringify({list: userSubjects()})); return true; }
+    catch(e){ toast('浏览器存不下这么大的题库', 'warn'); return false; }
+  }
+  function persistActive(id){
+    try{ localStorage.setItem(ACTIVE_STORE, id); }catch(e){}
+  }
+  function genId(){ return 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  function renderSubjectSelect(){
+    var sel = el('subject-select');
+    if(!sel) return;
+    sel.innerHTML = SUBJECTS.map(function(s){
+      var tag = s.source === 'demo' ? '（示例）' : (s.source === 'file' ? '（项目）' : '');
+      return '<option value="' + esc(s.id) + '">' + esc(s.name + tag) + '</option>';
+    }).join('');
+    sel.value = currentSubject.id;
+  }
+
+  function renderAll(){
+    renderSubjectSelect();
+    var meta = BANK.meta || {};
+    var title = currentSubject.name || meta.title;
+    if(title){
+      document.title = title + (meta.subtitle ? ' · ' + meta.subtitle : '');
+      var bt = el('brand-title'), bs = el('brand-sub');
+      if(bt) bt.textContent = title;
+      if(bs) bs.textContent = meta.subtitle || '章节刷题 + 模拟考试';
+    }
+    renderModes();
+    renderStats();
+    renderExamPanel();
+    renderChapters();
+    renderWorkspace();
+  }
+
+  function activateSubject(id){
+    var target = findSubject(id);
+    if(!target) return;
+    if(currentSubject && currentSubject.id === id) return;
+    if(currentSubject) save();
+    currentSubject = target;
+    BANK = currentSubject;
+    rebuildIndexes();
+    state = makeState();
+    hydrateState();
+    var srch = el('search'); if(srch) srch.value = '';
+    var sb = el('searchbox'); if(sb) sb.classList.remove('has-value');
+    persistActive(id);
+    renderAll();
+    save();
+  }
+
+  function refreshCurrentSubject(){
+    rebuildIndexes();
+    pruneState();
+    renderAll();
+    save();
+  }
+
+  function mergeChapters(target, incoming){
+    var used = {};
+    target.chapters.forEach(function(ch){ used[ch.key] = true; });
+    incoming.forEach(function(ch){
+      var baseKey = ch.key || 'imported';
+      var baseName = ch.name || '导入的题库';
+      var key = baseKey, name = baseName, n = 2;
+      while(used[key]){ key = baseKey + '-' + n; name = baseName + '(' + n + ')'; n++; }
+      used[key] = true;
+      target.chapters.push({
+        key: key, name: name, subtitle: ch.subtitle, source: true,
+        questions: (ch.questions || []).map(function(q){
+          return { id: key + '-' + (q.num != null ? q.num : 0), num: q.num, type: q.type,
+                   stem: q.stem, options: q.options, answer: q.answer };
+        })
+      });
+    });
+  }
+
+  function renameSubject(id){
+    var s = findSubject(id);
+    if(!s || s.source !== 'imported') return;
+    var name = (window.prompt('给这个学科起个新名字：', s.name) || '').trim();
+    if(!name || name === s.name) return;
+    s.name = name;
+    if(s.meta) s.meta.title = name;
+    s.updatedAt = Date.now();
+    persistSubjects();
+    if(s.id === currentSubject.id) renderAll(); else { renderBankPanel(); renderSubjectSelect(); }
+  }
+
+  function deleteSubject(id){
+    var s = findSubject(id);
+    if(!s || s.source !== 'imported') return;
+    if(!window.confirm('删除学科「' + s.name + '」？\n该学科的全部题目和做题记录会一起删除，且无法恢复。')) return;
+    SUBJECTS = SUBJECTS.filter(function(x){ return x.id !== id; });
+    persistSubjects();
+    delete progressStore[id];
+    try{ localStorage.setItem(STORE, JSON.stringify(progressStore)); }catch(e){}
+    if(currentSubject.id === id){
+      currentSubject = null;
+      activateSubject(SUBJECTS[0].id);
+    }else{
+      renderBankPanel(); renderSubjectSelect();
+    }
+  }
+
   /* ---------------- 题库：导入 / 导出 / 清除 ---------------- */
   function renderBankPanel(){
-    var src = window.MAYUAN_BANK_SOURCE || 'demo';
-    var label = src === 'imported' ? '本地导入题库'
-              : (src === 'file' ? '项目题库文件' : '示例题库');
-    el('bank-name').textContent = label + ' · ' + TOTAL + ' 题';
-    el('btn-restore-bank').hidden = src !== 'imported';
-    el('bank-note').hidden = src !== 'demo';
-    var host = el('bank-chapters');
-    if(!CHAPTERS.length){
-      host.innerHTML = '<div class="bank-empty">还没有章节，先导入题库文件。</div>';
-      return;
-    }
-    host.innerHTML = CHAPTERS.map(function(ch){
-      return '<div class="bank-chap"><span class="nm">' + esc(ch.name) + '</span>' +
-        '<span class="ct">' + ch.questions.length + ' 题</span>' +
-        '<button type="button" class="del" data-del-chapter="' + esc(ch.key) + '">删除</button></div>';
+    var s = currentSubject;
+    el('bank-name').textContent = s.name + ' · ' + TOTAL + ' 题';
+    el('bank-note').hidden = s.source !== 'demo';
+    var editable = s.source === 'imported';
+    el('btn-clear-questions').hidden = !editable;
+
+    var host = el('subject-list');
+    host.innerHTML = SUBJECTS.map(function(sub){
+      var total = sub.chapters.reduce(function(n,c){ return n + (c.questions ? c.questions.length : 0); }, 0);
+      var tag = sub.source === 'demo' ? '示例' : (sub.source === 'file' ? '项目' : '我的');
+      return '<div class="subj' + (sub.id === s.id ? ' active' : '') + '" data-subj="' + esc(sub.id) + '" title="点击切换到这个学科">' +
+        '<span class="subj-name">' + esc(sub.name) + '</span>' +
+        '<span class="subj-meta">' + tag + ' · ' + total + ' 题</span>' +
+        (sub.source === 'imported'
+          ? '<button type="button" class="subj-btn" data-act="rename" data-subj="' + esc(sub.id) + '">重命名</button>' +
+            '<button type="button" class="subj-btn danger" data-act="delete" data-subj="' + esc(sub.id) + '">删除</button>'
+          : '') +
+        '</div>';
     }).join('');
-  }
 
-  /* ---------------- 题库的增删改 ---------------- */
-  function persistBank(){
-    try{
-      localStorage.setItem(BANK_STORE, JSON.stringify(BANK));
-      window.MAYUAN_BANK_SOURCE = 'imported';
-    }catch(e){
-      toast('浏览器存不下这么大的题库', 'warn');
+    var chHost = el('bank-chapters');
+    if(!CHAPTERS.length){
+      chHost.innerHTML = '<div class="bank-empty">还没有章节，先导入题库文件。</div>';
+    }else{
+      chHost.innerHTML = CHAPTERS.map(function(ch){
+        return '<div class="bank-chap"><span class="nm">' + esc(ch.name) + '</span>' +
+          '<span class="ct">' + ch.questions.length + ' 题</span>' +
+          (editable ? '<button type="button" class="del" data-del-chapter="' + esc(ch.key) + '">删除</button>' : '') +
+          '</div>';
+      }).join('');
     }
   }
 
-  /* 删题/删章节改的是浏览器里的副本，所以第一次修改时会先把当前题库复制到本地 */
-  function ensureLocalCopy(){
-    if(window.MAYUAN_BANK_SOURCE !== 'imported') persistBank();
-  }
+  /* ---------------- 题库的增删改（只作用于用户自建的学科） ---------------- */
 
   /* 题库变了之后，把指向已消失题目的记录一并清掉，免得错题本统计出幽灵数据 */
   function pruneState(){
@@ -1117,51 +1254,47 @@ function bootQuiz(){
   }
 
   function deleteQuestion(q){
-    if(!window.confirm('删除这道题？\n只改浏览器里的题库副本，不动你的 Word 文件。')) return;
-    ensureLocalCopy();
+    if(currentSubject.source !== 'imported') return;
+    if(!window.confirm('删除这道题？\n只改浏览器里的学科，不动你的 Word 文件。')) return;
     CHAPTERS.forEach(function(ch){
       var ids = ch.questions.map(function(x){ return x.id; });
       var i = ids.indexOf(q.id);
       if(i >= 0) ch.questions.splice(i, 1);
     });
-    persistBank();
+    persistSubjects();
     afterBankChange();
     toast('已删除这道题');
   }
 
   function deleteChapter(key){
+    if(currentSubject.source !== 'imported') return;
     var ch = chapterOf(key);
     if(!ch) return;
-    if(!window.confirm('删除整章「' + ch.name + '」（' + ch.questions.length + ' 题）？\n只改浏览器里的题库副本，不动你的 Word 文件。')) return;
-    ensureLocalCopy();
+    if(!window.confirm('删除整章「' + ch.name + '」（' + ch.questions.length + ' 题）？\n只改浏览器里的学科，不动你的 Word 文件。')) return;
     BANK.chapters = CHAPTERS.filter(function(c){ return c.key !== key; });
-    persistBank();
+    persistSubjects();
     afterBankChange();
     toast('已删除章节「' + ch.name + '」');
   }
 
   function clearAllQuestions(){
-    if(!TOTAL){ toast('题库已经是空的', 'warn'); return; }
-    if(!window.confirm('清空全部 ' + TOTAL + ' 道题？\n清空后可以重新导入，也可以用「恢复为原题库」撤回。')) return;
-    ensureLocalCopy();
+    if(currentSubject.source !== 'imported') return;
+    if(!TOTAL){ toast('这个学科已经是空的', 'warn'); return; }
+    if(!window.confirm('清空「' + currentSubject.name + '」的全部 ' + TOTAL + ' 道题？\n清空后可以重新导入。')) return;
     BANK.chapters = [];
-    persistBank();
+    persistSubjects();
     afterBankChange();
     toast('已清空题目，点「导入题库文件」重新导入');
   }
 
-  function restoreBank(){
-    if(!window.confirm('放弃浏览器里的题库，回到项目自带的题库文件（或示例题库）？')) return;
-    try{ localStorage.removeItem(BANK_STORE); }catch(e){}
-    location.reload();
-  }
-
-  /* 一键回到"刚打开网页"的初始状态：清掉本机存的题库和全部做题记录 */
+  /* 一键回到"刚打开网页"的初始状态：清掉本机存的所有学科和全部做题记录 */
   function wipeLocalData(){
-    if(!window.confirm('清空这台设备上保存的全部内容：导入的题库、做题记录、错题本、收藏。\n' +
+    if(!window.confirm('清空这台设备上保存的全部内容：所有学科、做题记录、错题本、收藏。\n' +
                        '你的 Word 文档和项目里的题库文件不受影响。\n\n确定清空？')) return;
     try{
       localStorage.removeItem(BANK_STORE);
+      localStorage.removeItem(SUBJECT_STORE);
+      localStorage.removeItem(ACTIVE_STORE);
       localStorage.removeItem(STORE);
     }catch(e){}
     location.reload();
@@ -1185,9 +1318,9 @@ function bootQuiz(){
   }
 
   function exportBank(){
-    var bank = window.MAYUAN_QUESTION_BANK;
+    var bank = { meta: BANK.meta || {}, chapters: BANK.chapters || [] };
     var text = JSON.stringify(bank, null, 2) + '\n';
-    var title = (bank.meta && bank.meta.title) ? bank.meta.title : '题库';
+    var title = currentSubject.name || '题库';
     var url = URL.createObjectURL(new Blob([text], {type: 'application/json;charset=utf-8'}));
     var a = document.createElement('a');
     a.href = url;
@@ -1214,26 +1347,47 @@ function bootQuiz(){
         (res.problems.length > 12 ? '<li>……还有 ' + (res.problems.length - 12) + ' 处</li>' : '') +
         '</ul></div>'
       : '';
+    var targets = userSubjects().map(function(s){
+      return '<option value="' + esc(s.id) + '">追加到「' + esc(s.name) + '」</option>';
+    }).join('');
     body.innerHTML =
-      '<div class="imp-field"><label for="imp-title">标题</label>' +
-      '<input class="inp" id="imp-title" value="' + esc(bank.meta.title) + '"></div>' +
+      '<div class="imp-field"><label for="imp-target">导入到</label>' +
+      '<select class="inp" id="imp-target"><option value="__new__">新建学科</option>' + targets + '</select></div>' +
+      '<div class="imp-field" id="imp-name-row"><label for="imp-name">学科名</label>' +
+      '<input class="inp" id="imp-name" value="' + esc(bank.meta.title) + '"></div>' +
       '<div class="imp-big">共 ' + bank.meta.total + ' 题 · ' + bank.chapters.length + ' 个章节</div>' +
       '<div class="imp-list">' + rows + '</div>' + problems + hintHTML() +
-      '<div class="bank-tip">导入后题库保存在这台设备的浏览器里，不上传、也不影响别人。</div>';
+      '<div class="bank-tip">导入后保存在这台设备的浏览器里，不上传、也不影响别人。</div>';
+    var targetSel = el('imp-target');
+    var nameRow = el('imp-name-row');
+    function syncNameRow(){ nameRow.style.display = (targetSel.value === '__new__') ? '' : 'none'; }
+    targetSel.addEventListener('change', syncNameRow);
+    syncNameRow();
     foot.innerHTML =
       '<button class="btn btn-soft" type="button" id="imp-cancel">取消</button>' +
       '<button class="btn btn-primary" type="button" id="imp-ok">导入并开始使用</button>';
     el('imp-cancel').addEventListener('click', closeImport);
     el('imp-ok').addEventListener('click', function(){
-      var t = el('imp-title').value.trim();
-      if(t) bank.meta.title = t;
-      try{
-        localStorage.setItem(BANK_STORE, JSON.stringify(bank));
-      }catch(e){
-        toast('浏览器存不下这么大的题库，建议少导几章', 'warn');
-        return;
+      var targetId = targetSel.value;
+      if(targetId === '__new__'){
+        var name = (el('imp-name').value.trim()) || bank.meta.title || '我的题库';
+        var sub = { id: genId(), name: name, source: 'imported', meta: bank.meta || {}, chapters: bank.chapters, updatedAt: Date.now() };
+        if(sub.meta) sub.meta.title = name;
+        SUBJECTS.push(sub);
+        if(!persistSubjects()){ SUBJECTS.pop(); return; }
+        closeImport();
+        activateSubject(sub.id);
+      }else{
+        var target = findSubject(targetId);
+        if(!target){ toast('目标学科不存在', 'warn'); return; }
+        mergeChapters(target, bank.chapters);
+        target.updatedAt = Date.now();
+        if(!persistSubjects()) return;
+        closeImport();
+        if(targetId === currentSubject.id) refreshCurrentSubject();
+        else activateSubject(targetId);
       }
-      location.reload();
+      toast('已导入');
     });
   }
 
@@ -1266,8 +1420,21 @@ function bootQuiz(){
   });
   el('btn-export').addEventListener('click', exportBank);
   el('btn-clear-questions').addEventListener('click', clearAllQuestions);
-  el('btn-restore-bank').addEventListener('click', restoreBank);
   el('btn-wipe').addEventListener('click', wipeLocalData);
+  el('subject-select').addEventListener('change', function(){
+    activateSubject(el('subject-select').value);
+  });
+  el('subject-list').addEventListener('click', function(e){
+    var row = e.target.closest('[data-subj]');
+    if(!row) return;
+    var act = e.target.closest('[data-act]');
+    if(act){
+      if(act.dataset.act === 'rename') renameSubject(act.dataset.subj);
+      else if(act.dataset.act === 'delete') deleteSubject(act.dataset.subj);
+      return;
+    }
+    activateSubject(row.dataset.subj);
+  });
   el('bank-chapters').addEventListener('click', function(e){
     var b = e.target.closest('[data-del-chapter]');
     if(b) deleteChapter(b.dataset.delChapter);
@@ -1282,29 +1449,16 @@ function bootQuiz(){
 
   /* ---------------- boot ---------------- */
   if(!storageAvailable()) el('storage-warn').hidden = false;
-  renderBankPanel();
-  var meta = BANK.meta || {};
-  if(meta.title){
-    document.title = meta.title + (meta.subtitle ? ' · ' + meta.subtitle : '');
-    var bt = el('brand-title');
-    var bs = el('brand-sub');
-    if(bt) bt.textContent = meta.title;
-    if(bs) bs.textContent = meta.subtitle || '章节刷题 + 模拟考试';
-  }
-  el('s-total').textContent = TOTAL;
-  renderModes();
-  renderStats();
-  renderExamPanel();
-  renderChapters();
-  renderWorkspace();
+  renderAll();
   save();
 }
 
 /*
- * 题库来源优先级：
- *   1. 浏览器里导入的题库（存在 localStorage，见上面「题库」面板）
+ * 学科来源：
+ *   1. 用户自建的学科（存 localStorage，见「题库」面板）
  *   2. data/question-bank.js（由 tools/build_bank.py 生成，属个人内容，不进仓库）
  *   3. data/demo-bank.js（仓库自带的示例题库）
+ * 系统学科（question-bank.js / demo-bank.js）只读；用户学科可编辑、可多次导入追加章节。
  */
 (function(){
   function load(src){
@@ -1316,34 +1470,87 @@ function bootQuiz(){
       document.head.appendChild(s);
     });
   }
-  function importedBank(){
-    var raw = null;
-    try{ raw = localStorage.getItem(BANK_STORE); }catch(e){ return null; }
-    if(!raw) return null;
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lsSet(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+  function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+
+  function loadUserSubjects(){
+    var raw = lsGet(SUBJECT_STORE);
+    if(!raw) return [];
     try{
-      var b = JSON.parse(raw);
-      // 允许空题库（chapters: []），这样"清空全部题目"之后刷新不会又冒出来
-      if(b && Array.isArray(b.chapters)) return b;
+      var o = JSON.parse(raw);
+      var list = (o && Array.isArray(o.list)) ? o.list : null;
+      if(list){
+        return list.filter(function(s){
+          return s && s.id && s.source === 'imported' && Array.isArray(s.chapters);
+        });
+      }
     }catch(e){}
-    try{ localStorage.removeItem(BANK_STORE); }catch(e){}
-    return null;
+    return [];
   }
-  var mine = importedBank();
-  if(mine){
-    window.MAYUAN_QUESTION_BANK = mine;
-    window.MAYUAN_BANK_SOURCE = 'imported';
-    bootQuiz();
-    return;
-  }
-  load('data/question-bank.js').then(function(ok){
-    if(ok && window.MAYUAN_QUESTION_BANK){
-      window.MAYUAN_BANK_SOURCE = 'file';
-      return;
+
+  /* 旧版只存一个题库（mayuan.bank.v1），升级时把它迁成一个学科，进度也一并搬过去 */
+  function migrateLegacy(userSubjects){
+    var legacyBank = null;
+    var rawBank = lsGet(BANK_STORE);
+    if(rawBank){
+      try{ var b = JSON.parse(rawBank); if(b && Array.isArray(b.chapters)) legacyBank = b; }catch(e){}
     }
-    return load('data/demo-bank.js').then(function(){
-      window.MAYUAN_BANK_SOURCE = 'demo';
+    var legacyProgress = null;
+    var rawReview = lsGet(STORE);
+    if(rawReview){
+      try{
+        var r = JSON.parse(rawReview);
+        if(r && typeof r === 'object' && !Array.isArray(r) && r.answers) legacyProgress = r;
+      }catch(e){}
+    }
+    if(legacyBank){
+      userSubjects.push({
+        id: 'u-legacy', name: (legacyBank.meta && legacyBank.meta.title) || '我的题库',
+        source: 'imported', meta: legacyBank.meta || {}, chapters: legacyBank.chapters, updatedAt: Date.now()
+      });
+      lsDel(BANK_STORE);
+    }
+    if(legacyProgress){
+      if(legacyBank){
+        try{ var store = {}; store['u-legacy'] = legacyProgress; lsSet(STORE, JSON.stringify(store)); }
+        catch(e){}
+      }else{
+        lsSet(STORE, '{}');
+      }
+    }
+  }
+
+  function systemSubject(id, name, source, bank){
+    return { id: id, name: name, source: source, meta: bank.meta || {}, chapters: bank.chapters || [], updatedAt: 0 };
+  }
+
+  var userSubjects = loadUserSubjects();
+  migrateLegacy(userSubjects);
+
+  load('data/question-bank.js').then(function(okFile){
+    var systemSubjects = [];
+    if(okFile && window.MAYUAN_QUESTION_BANK && Array.isArray(window.MAYUAN_QUESTION_BANK.chapters)){
+      var fb = window.MAYUAN_QUESTION_BANK;
+      systemSubjects.push(systemSubject('file', (fb.meta && fb.meta.title) || '项目题库', 'file', fb));
+    }
+    return load('data/demo-bank.js').then(function(okDemo){
+      if(okDemo && window.MAYUAN_QUESTION_BANK && Array.isArray(window.MAYUAN_QUESTION_BANK.chapters)){
+        systemSubjects.push(systemSubject('demo', '示例题库', 'demo', window.MAYUAN_QUESTION_BANK));
+      }
+      var subjects = systemSubjects.concat(userSubjects);
+      if(!subjects.length){
+        document.getElementById('qcard').innerHTML =
+          '<div class="ws-none"><b>题库未加载</b><span>请确认 data/question-bank.js 或 data/demo-bank.js 存在且格式正确。</span></div>';
+        return;
+      }
+      var activeId = lsGet(ACTIVE_STORE);
+      var active = null;
+      if(activeId){
+        for(var i=0;i<subjects.length;i++) if(subjects[i].id === activeId) active = subjects[i];
+      }
+      if(!active) active = userSubjects[0] || systemSubjects.filter(function(s){ return s.id === 'demo'; })[0] || subjects[0];
+      bootQuiz(subjects, active.id);
     });
-  }).then(function(){
-    bootQuiz();
   });
 })();

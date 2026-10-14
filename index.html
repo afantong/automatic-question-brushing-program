@@ -30,6 +30,11 @@
       </span>
     </div>
 
+    <div class="subject-picker" title="切换学科">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+      <select id="subject-select" aria-label="切换学科"></select>
+    </div>
+
     <nav class="nav" id="main-nav" aria-label="分区导航">
       <button type="button" data-nav="home">
         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>首页
@@ -233,22 +238,22 @@
         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
       </h2>
       <div class="bank-box">
-        <div class="bank-now">当前：<b id="bank-name">示例题库</b></div>
+        <div class="bank-now">当前学科：<b id="bank-name">示例题库</b></div>
+        <div class="subject-list" id="subject-list"></div>
         <div class="bank-actions">
           <button class="btn btn-primary" id="btn-import" type="button">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>导入题库文件
           </button>
-          <button class="btn btn-soft" id="btn-export" type="button">导出当前题库</button>
-          <button class="btn btn-soft" id="btn-clear-questions" type="button">清空全部题目</button>
-          <button class="btn btn-soft" id="btn-restore-bank" type="button" hidden>恢复为原题库</button>
-          <button class="btn btn-soft danger" id="btn-wipe" type="button" title="清空这台设备上保存的题库和做题记录">清空本机数据</button>
+          <button class="btn btn-soft" id="btn-export" type="button">导出当前学科</button>
+          <button class="btn btn-soft" id="btn-clear-questions" type="button">清空当前学科题目</button>
+          <button class="btn btn-soft danger" id="btn-wipe" type="button" title="清空这台设备上保存的学科和做题记录">清空本机数据</button>
         </div>
         <details class="bank-manage" id="bank-manage">
-          <summary>管理章节</summary>
+          <summary>管理当前学科章节</summary>
           <div class="bank-chapters" id="bank-chapters"></div>
         </details>
-        <p class="bank-tip" id="bank-note" hidden>现在用的是示例题库，点「导入题库文件」就能换成你自己的题。</p>
-        <p class="bank-tip">支持 Word（.docx）、纯文本（.txt / .md）和之前导出的题库文件，全部在本地解析，不上传任何东西。删题和删章节只改浏览器里的副本，不动你的 Word 文件。</p>
+        <p class="bank-tip" id="bank-note" hidden>现在用的是示例题库（只读），点「导入题库文件」就能新建自己的学科。</p>
+        <p class="bank-tip">支持 Word（.docx）、纯文本（.txt / .md）和之前导出的题库文件，全部在本地解析，不上传任何东西。导入时可新建学科或追加到已有学科，重名章节会自动加「(2)」。删题和删章节只改浏览器里的学科，不动你的 Word 文件。</p>
         <details class="imp-hint"><summary>Word 文档要写成什么格式？</summary>
           每道题三行，题号行和「答案：」是解析的锚点：<br>
           <code>1、题干……（ ）</code><br>
